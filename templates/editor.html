@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+<title>Editor - Selftranslate</title>
+<script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.4/jquery.min.js"></script>
+<!-- script type="text/javascript" src="https://github.com/jaz303/jquery-grab-bag/raw/307fbfedfb69f594a94048c554c11249bedcd77b/javascripts/jquery.autogrow-textarea.js"></script -->
+<script type="text/javascript">
+// https://github.com/jaz303/jquery-grab-bag/blob/master/javascripts/jquery.autogrow-textarea.js
+(function($) {
+
+    /*
+     * Auto-growing textareas; technique ripped from Facebook
+     */
+    $.fn.autogrow = function(options) {
+        
+        this.filter('textarea').each(function() {
+            
+            var $this       = $(this),
+                minHeight   = 0, //$this.height(),
+                minContent  = "m",
+                lineHeight  = $this.css('lineHeight');
+            
+            var shadow = $('<div></div>').css({
+                position:   'absolute',
+                top:        -10000,
+                left:       -10000,
+                width:      $(this).width() - parseInt($this.css('paddingLeft')) - parseInt($this.css('paddingRight')),
+                fontSize:   $this.css('fontSize'),
+                fontFamily: $this.css('fontFamily'),
+                lineHeight: $this.css('lineHeight'),
+                resize:     'none'
+            }).appendTo(document.body);
+            
+            var update = function() {
+    
+                var times = function(string, number) {
+                    for (var i = 0, r = ''; i < number; i ++) r += string;
+                    return r;
+                };
+                
+                var val = this.value.replace(/</g, '&lt;')
+                                    .replace(/>/g, '&gt;')
+                                    .replace(/&/g, '&amp;')
+                                    .replace(/\n$/, '<br/>&nbsp;')
+                                    .replace(/\n/g, '<br/>')
+                                    .replace(/ {2,}/g, function(space) { return times('&nbsp;', space.length -1) + ' '});
+                if (val == "") val = minContent;
+                shadow.html(val);
+                $(this).css('height', Math.max(shadow.height() + /*2*/0, minHeight));
+            
+            }
+            
+            $(this).change(update).keyup(update).keydown(update);
+            
+            update.apply(this);
+            
+        });
+        
+        return this;
+        
+    }
+    
+})(jQuery);
+</script>
+<style type="text/css">
+.template { display: none; }
+
+table#entries {
+  width: 100%;
+  border-spacing: 0px 6px;
+}
+th {
+  background: white;
+  text-align: left;
+}
+
+td, th {
+  padding: 0px;
+}
+
+tr {
+  margin: -1px;
+  background: #eee;
+}
+
+tr.odd {
+  background: #ddd;
+}
+
+.keyColumn {
+  vertical-align: top;
+  width: 30%;
+}
+
+.key {
+  font-weight: bold;
+  font-family: monospace;
+}
+
+.valueColumn {
+  vertical-align: top;
+  width: 50%;
+  padding-right: 7px;
+}
+
+div.textarea {
+  width: 100%;
+  margin: 2px 3px 2px 0;
+  border: 2px inset threedface;
+  background: white;
+  -moz-appearance: textfield-multiline;
+  -webkit-appearance: textarea;
+  min-height: 15px;
+  font-family: monospace;
+}
+
+textarea {
+  width: 100%;
+  margin: 2px 3px 2px 0;
+}
+
+.statusColumn {
+  width: 20%;
+}
+
+.status { 
+  opacity: 0; /* start invisible */
+  text-align: center;
+}
+
+.info {
+  background: yellow;
+  border: solid 2px green;
+}
+
+.error {
+  background yellow;
+  border: solid 2px red; 
+}
+
+.section .name {
+  font-family: monospace;
+}
+
+</style>
+</head>
+
+<body>
+
+<script type="text/javascript">
+  function convert_to_textarea(e) {
+    var content = $(this).text();
+    var textarea = $('<textarea class="value" rows="1"></textarea>');
+    textarea.val(content);
+    $(this).replaceWith(textarea);
+    textarea.focus();
+    setTimeout(function () { textarea.autogrow.apply(textarea); }, 0);
+  }
+
+  function submit(e) {
+    var entry = $(e.currentTarget);
+    var key = entry.find('.key');
+    var value = entry.find('.value');
+    var status = entry.find('.status');
+
+    if ($.catalog[key.text()] == value.val()) {
+      status.text('Unmodified').animate({opacity: 0}, 1000);
+      return;
+    }
+
+    status.removeClass("error").addClass("info");
+    status.text("Saving...").animate({opacity: 1});
+
+    post(key.text(), value.val(), 
+         function (resp) {
+           $.catalog[key.text()] = resp;
+           value.val(resp); // XXX overwrites if text changed meanwhile?
+           status.text("Saved").css('opacity', '1').animate({opacity: 0}, 1000, function() { status.removeClass("info").text(""); });
+         },
+         function (xhr, reason, exception) {
+           status.removeClass("info").addClass("error");
+           status.text("Saving failed: "+xhr.status + " " + reason).animate({opacity: 1});
+         });
+  }
+
+  function post(key, val, success, error) {
+    $.ajax({url: '{% url selftranslate.views.view_unit language %}',
+            type: 'POST',
+            data: {'key': key, 'value': val},
+            success: success,
+            error: error,
+           });
+  }
+  
+  $(document).ready(function() {});
+
+  $.ajax({url: '{% url selftranslate.views.view_catalog language %}',
+          dataType: 'json',
+          success: function (entries) {
+    $.catalog = {};
+    $.sections = {};
+    $.entries = entries;
+
+    for (var i = 0; i < entries.length; i++) {
+      var key = entries[i].key;
+      var value = entries[i].value;
+      var fuzzy = entries[i].fuzzy;
+
+      $.catalog[key] = value;
+
+      var entry = $('.entry.template').clone().removeClass("template");
+
+      entry.find('.key').text(key);
+      if (typeof value == 'string') {
+        entry.find('.value').text(value);
+      } else {
+        entry.find('.value').text('');
+      }
+      
+      if (entry.find('.value').text() == '') {
+        entry.addClass('untranslated');
+      }
+      if (fuzzy) {
+        entry.addClass('fuzzy');
+      }
+      if (i % 2) entry.addClass("odd");
+
+      for (var j = 0; j < entries[i].locations.length; j++) {
+        var location = entries[i].locations[j];
+        var section = location.split('/')[0];
+        if (! $.sections[section]) {
+          $.sections[section] = {};
+        }
+        $.sections[section][key] = true;
+        entry.addClass("section"+section);
+      }
+
+      $('#entries').append(entry);
+    }
+
+    for (var name in $.sections) {
+      var section = $('.section.template').clone().removeClass("template");
+      section.find('.name').text(name);
+      section.find('input').val(name);
+      $('#sections').append(section);
+    }
+
+    $('.entry').live('keydown', function (e) {
+      if (e.ctrlKey && e.keyCode == 13) {
+        submit(e);
+      }
+    });
+
+    $('.entry').live('focusout', submit);
+
+    $('.entry div.textarea').live('focusin', convert_to_textarea);
+    $('.entry div.textarea').live('click', convert_to_textarea);
+
+    $('.entry').live('focusin', function() {
+      for (var i = 0; i<$.entries.length; i++) {
+        var key = $.entries[i].key;
+        var value = $.entries[i].value;
+        var fuzzy = $.entries[i].fuzzy;
+        if (key != $(this).find('.key').text())
+          continue;
+
+        $('.inforow').remove();
+        var row = $('<tr class="inforow"><td colspan="3">info</td></tr>');
+        row.find('td').html($.entries[i].allcomments.reduce(function(a,b) {return a.concat(b); }).join("<br>"));
+        $(this).closest('tr').after(row)
+        break;
+      }
+    });
+
+//    $('.entry textarea').autogrow()
+
+
+    $('input[name="section"]').change(function() {
+      if ($(this).attr('checked')) { // always true?
+        update_filtering();
+      }
+    });
+
+    $('input[name="status"]').change(function() {
+      if ($(this).attr('checked')) { // always true?
+        update_filtering();
+      }
+    });
+  }});
+
+  function update_filtering() {
+    var status = $('input[name="status"]:checked').val();
+    var section = $('input[name="section"]:checked').val();
+
+    var sectionClass = '.section'+section
+    if (section == "all")
+      sectionClass = "";
+
+    var statusClass = "."+status;
+    if (status == "all")
+      statusClass = "";
+
+    if (status == "todo")
+      statusClass = ":not(:not(.untranslated, .fuzzy))"; // XXX not not
+
+    var entries = $('.entry');
+    if (sectionClass+statusClass) {
+      entries.not(sectionClass+statusClass).hide();
+      entries.filter(sectionClass+statusClass).not('.template').show();
+    } else {
+      entries.not('.template').show();
+    }
+    // visible rows have changed, even-odd alternation needs update:
+    entries.filter(':visible:even').removeClass('odd');
+    entries.filter(':visible:odd').addClass('odd');
+  }
+</script>
+
+<h1>Editor for language {{ language }}</h1>
+
+<form>
+  Show sections:
+  <span id="sections">
+    <input type="radio" name="section" value="all" checked="true"> All
+    <span class="section template">
+      <input type="radio" name="section" value="value"> 
+      <span class="name">Name</span>
+    </span>
+  </span>
+  <br />
+  Show entries:
+  <input type="radio" name="status" value="all" checked="true"> All
+  <input type="radio" name="status" value="todo"> To do
+  <input type="radio" name="status" value="untranslated"> Untranslated
+</form>
+
+<table id="entries">
+  <tr>
+    <th class="keyColumn">Original</th>
+    <th class="valueColumn">Translation</th>
+    <th class="statusColumn">Status</th>
+  </tr>
+  <tr class="entry template">
+    <td class="keyColumn key">key</td>
+    <td class="valueColumn">      
+      <div class="value textarea" rows="1" tabindex="0"></div>
+    </td>
+    <td class="statusColumn status"></td>
+  </tr>
+</table>
+
+</body>
+</html>
