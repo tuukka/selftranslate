@@ -57,6 +57,13 @@ def view_languages(request, language=None, domain="django"):
         languages = [l for l in languages if l.startswith(language)]
     return render_to_response("languages.html", dict(languages=languages))
 
+def view_download(request, language, domain="django"):
+    localepath = locale_path(language, domain)
+    pofile = file(localepath, "rb")
+    content = pofile.read()
+    pofile.close()
+    return HttpResponse(content, "text/plain; charset=utf-8")
+
 def view_editor(request, language, domain="django"):
     localepath = locale_path(language, domain)
     translation = pofile(file(localepath))
