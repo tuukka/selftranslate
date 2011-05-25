@@ -4,4 +4,12 @@ Languages present:
 {% for lang in languages %}
 <li><a href="{{ lang }}/">{{ lang }}</a> (<a href="{{ lang }}/django.po">download</a>)</li>
 {% endfor %}
+{% if creatable %}
+<li>
+<form method="post" action="{% url selftranslate.views.view_create %}">
+<input type="text" name="language" />
+<button>Start new</button>
+</form>
+</li>
+{% endif %}
 </ul>

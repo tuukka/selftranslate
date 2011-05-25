@@ -1,6 +1,7 @@
 
-import os, time
+import os, time, re
 from glob import glob
+from shutil import copytree
 
 try:
     import simplejson as json
@@ -9,8 +10,8 @@ except (ImportError, NameError):
     import json
 
 from django.conf import settings
-from django.http import HttpResponse
-from django.shortcuts import render_to_response
+from django.http import HttpResponse, HttpResponseForbidden
+from django.shortcuts import render_to_response, redirect
 from django.utils.importlib import import_module
 
 from translate.storage.po import pofile
@@ -25,7 +26,7 @@ def purge_gettext_cache():
     trans._active = {}
     trans._default = None
 
-def view_reload(request):
+def view_reload(request, domain="_"):
     purge_cache()
 
     return HttpResponse("reloaded", mimetype="text/plain")
@@ -50,12 +51,30 @@ def locale_path(language, domain):
 
     return localepath
 
+def view_create(request, domain="_"):
+    language = request.POST['language']
+    projectpath = project_path()
+    if projectpath is not None and re.match("[a-z][a-z](_[A-Z][A-Za-z]*)?$", language):
+        sourcepath = os.path.join(projectpath, "xx")
+        targetpath = os.path.join(projectpath, language)
+        copytree(sourcepath, targetpath)
+        return redirect("selftranslate.views.view_languages")
+    else:
+        return HttpResponseForbidden("403 Forbidden")
+
 def view_languages(request, language=None, domain="django"):
     localepath = project_path()
     languages = [os.path.basename(f) for f in glob(os.path.join(localepath, "*"))]
     if language:
         languages = [l for l in languages if l.startswith(language)]
-    return render_to_response("languages.html", dict(languages=languages))
+
+    creatable = False
+    if "xx" in languages:
+        creatable = True
+        languages.remove("xx")
+
+    return render_to_response("languages.html", dict(languages=languages,
+                                                     creatable=creatable))
 
 def view_download(request, language, domain="django"):
     localepath = locale_path(language, domain)

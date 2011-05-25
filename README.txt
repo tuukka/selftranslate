@@ -50,6 +50,11 @@ replacing language-code with en, es, de etc.:
 
 django-admin.py makemessages -s language-code
 
+3.1. If you want users to be able to start new translations, add a localisation
+with the language code xx to be used as a template:
+
+django-admin.py makemessages -s xx
+
 4. Enable the localisations by USE_I18N=True in settings.py.
 
 5. If the translatable texts change, make the updates available to the 
